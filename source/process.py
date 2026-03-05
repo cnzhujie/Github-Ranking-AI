@@ -122,6 +122,7 @@ class WriteFile(object):
         self.col = ['rank', 'item', 'repo_name', 'stars', 'forks', 'language', 'repo_url', 'username', 'issues',
                     'last_commit', 'description']
         self.repo_list = []
+        self.yesterday_ranks = self.load_yesterday_ranks()
         for i in range(len(languages)):
             lang = languages[i]
             lang_md = languages_md[i]
@@ -134,6 +135,42 @@ class WriteFile(object):
                 "data": repos_languages[lang],
                 "item": lang,
             })
+
+    def load_yesterday_ranks(self):
+        from datetime import datetime, timedelta
+        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+        csv_path = f'../Data/github-ranking-{yesterday}.csv'
+        if not os.path.exists(csv_path):
+            print(f"No yesterday data found: {csv_path}")
+            return None
+        df = pd.read_csv(csv_path)
+        ranks = {}
+        for _, row in df.iterrows():
+            repo_url = row['repo_url']
+            item = row['item']
+            rank_val = row['rank']
+            if isinstance(rank_val, str):
+                import re
+                match = re.match(r'^(\d+)', rank_val)
+                if match:
+                    rank_val = int(match.group(1))
+            ranks[(repo_url, item)] = rank_val
+        print(f"Loaded yesterday ranks from {csv_path}")
+        return ranks
+
+    def get_rank_changes(self, repos, item):
+        if self.yesterday_ranks is None:
+            return None
+        rank_changes = {}
+        for idx, repo in enumerate(repos):
+            repo_url = repo['html_url']
+            key = (repo_url, item)
+            if key in self.yesterday_ranks:
+                old_rank = self.yesterday_ranks[key]
+                new_rank = idx + 1
+                change = old_rank - new_rank
+                rank_changes[repo_url] = change
+        return rank_changes
 
     @staticmethod
     def write_head_contents():
@@ -154,17 +191,16 @@ class WriteFile(object):
     def write_readme_lang_md(self):
         os.makedirs('../Top100', exist_ok=True)
         for repo in self.repo_list:
-            # README.md
-            title_readme, title_100, file_100, data = repo["title_readme"], repo["title_100"], repo["file_100"], repo["data"]
+            title_readme, title_100, file_100, data, item = repo["title_readme"], repo["title_100"], repo["file_100"], repo["data"], repo["item"]
+            rank_changes = self.get_rank_changes(data, item)
             write_text('../README.md', 'a',
                        f"\n## {title_readme}\n\nThis is top 10, for more click **[{title_100}](Top100/{file_100})**\n\n")
-            write_ranking_repo('../README.md', 'a', data[:10])
+            write_ranking_repo('../README.md', 'a', data[:10], rank_changes)
             print(f"Save {title_readme} in README.md!")
 
-            # Top 100 file
             write_text(f"../Top100/{file_100}", "w",
                        f"[Github Ranking](../README.md)\n==========\n\n## {title_100}\n\n")
-            write_ranking_repo(f"../Top100/{file_100}", 'a', data)
+            write_ranking_repo(f"../Top100/{file_100}", 'a', data, rank_changes)
             print(f"Save {title_100} in Top100/{file_100}!\n")
 
     def repo_to_df(self, repos, item):

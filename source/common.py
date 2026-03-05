@@ -21,7 +21,7 @@ def write_text(file_name, method, text):
         f.write(text)
 
 
-def write_ranking_repo(file_name, method, repos):
+def write_ranking_repo(file_name, method, repos, rank_changes=None):
     # method: 'a'-append or 'w'-overwrite
     table_head = "| Ranking | Project Name | Stars | Forks | Language | Open Issues | Description | Last Commit |\n\
 | ------- | ------------ | ----- | ----- | -------- | ----------- | ----------- | ----------- |\n"
@@ -31,8 +31,19 @@ def write_ranking_repo(file_name, method, repos):
             repo_description = repo['description']
             if repo_description is not None:
                 repo_description = repo_description.replace('|', '\|')  # in case there is '|' in description
+            repo_url = repo['html_url']
+            rank_display = str(idx + 1)
+            if rank_changes:
+                if repo_url in rank_changes:
+                    change = rank_changes[repo_url]
+                    if change > 0:
+                        rank_display = f"{idx + 1} (↑{change})"
+                    elif change < 0:
+                        rank_display = f"{idx + 1} (↓{abs(change)})"
+                else:
+                    rank_display = f"{idx + 1} (NEW)"
             f.write("| {} | [{}]({}) | {} | {} | {} | {} | {} | {} |\n".format(
-                idx + 1, repo['name'], repo['html_url'], repo['stargazers_count'], repo['forks_count'],
+                rank_display, repo['name'], repo['html_url'], repo['stargazers_count'], repo['forks_count'],
                 repo['language'], repo['open_issues_count'], repo_description, repo['pushed_at']
             ))
         f.write('\n')
